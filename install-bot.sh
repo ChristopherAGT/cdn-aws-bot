@@ -2,11 +2,6 @@
 
 clear
 
-# ╔══════════════════════════════════════════════════════════════╗
-# ║            🤖 INSTALADOR BOT AWS CLOUDFRONT                  ║
-# ║                  Telegram Bot Installer                      ║
-# ╚══════════════════════════════════════════════════════════════╝
-
 RED='\e[1;91m'
 GREEN='\e[1;92m'
 YELLOW='\e[1;93m'
@@ -18,123 +13,113 @@ RESET='\e[0m'
 REPO="https://github.com/ChristopherAGT/cdn-aws-bot.git"
 FOLDER="cdn-aws-bot"
 
-spinner() {
-    local pid=$!
-    local delay=0.09
-    local spinstr='|/-\'
-    while ps a | awk '{print $1}' | grep -q "$pid"; do
-        local temp=${spinstr#?}
-        printf " ${CYAN}[%c]${RESET} " "$spinstr"
-        spinstr=$temp${spinstr%"$temp"}
-        sleep $delay
-        printf "\b\b\b\b"
-    done
+divider(){
+echo -e "${BLUE}════════════════════════════════════════════════════${RESET}"
 }
 
-divider() {
-echo -e "${BLUE}════════════════════════════════════════════════════════════${RESET}"
-}
-
-error_exit() {
-echo -e "${RED}❌ Error: $1${RESET}"
+error_exit(){
+echo -e "${RED}❌ $1${RESET}"
 exit 1
 }
 
-success() {
+success(){
 echo -e "${GREEN}✔ $1${RESET}"
 }
 
-info() {
+info(){
 echo -e "${CYAN}➜ $1${RESET}"
 }
 
-# ─────────────────────────────────────────────
+spinner() {
+    local pid=$!
+    local spin='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    local i=0
+    while kill -0 $pid 2>/dev/null; do
+        i=$(( (i+1) %10 ))
+        printf "\r${CYAN}[%c]${RESET} " "${spin:$i:1}"
+        sleep .15
+    done
+    printf "\r"
+}
 
-wait_for_apt() {
+progress(){
+echo -ne "${GREEN}[#####               ] 25%\r"
+sleep 0.2
+echo -ne "${GREEN}[##########          ] 50%\r"
+sleep 0.2
+echo -ne "${GREEN}[###############     ] 75%\r"
+sleep 0.2
+echo -ne "${GREEN}[####################] 100%${RESET}\n"
+}
 
+wait_for_apt(){
 while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1
 do
 echo -e "${YELLOW}Esperando desbloqueo de apt...${RESET}"
 sleep 3
 done
-
 }
 
-check_python() {
-
-command -v python3 >/dev/null || error_exit "Python3 no está instalado correctamente"
-
+check_python(){
+command -v python3 >/dev/null || error_exit "Python3 no está instalado"
 }
 
-check_pip() {
-
-python3 -m pip --version >/dev/null 2>&1 || error_exit "pip no funciona correctamente"
-
+check_pip(){
+python3 -m pip --version >/dev/null || error_exit "pip no funciona"
 }
 
-check_github() {
-
-curl -s https://github.com >/dev/null || error_exit "GitHub no responde. Verifique conexión a internet."
-
+check_github(){
+curl -s https://github.com >/dev/null || error_exit "GitHub no responde"
 }
 
-validate_token() {
-
+validate_token(){
 if [[ ! "$TELEGRAM_TOKEN" =~ ^[0-9]+:[A-Za-z0-9_-]+$ ]]; then
-error_exit "TOKEN inválido. Formato incorrecto."
+error_exit "TOKEN inválido"
 fi
-
 }
 
-save_token() {
-
+save_token(){
 echo "export TELEGRAM_TOKEN=\"$TELEGRAM_TOKEN\"" >> ~/.bashrc
-
 }
 
-# ─────────────────────────────────────────────
-
 divider
-echo -e "${WHITE}🚀 Iniciando instalación del bot...${RESET}"
+echo -e "${WHITE}🚀 Instalador Bot AWS CloudFront${RESET}"
 divider
 
-sleep 1
-
-# ROOT
 if [[ $EUID -ne 0 ]]; then
-error_exit "Ejecute este script como ROOT"
+error_exit "Ejecuta el script como ROOT"
 fi
 
-divider
 info "Verificando conexión con GitHub..."
 (check_github) &
 spinner
 success "GitHub accesible"
 
 divider
+
 info "Esperando disponibilidad de apt..."
 wait_for_apt
 
-divider
 info "Actualizando repositorios..."
-(sudo apt update -y > /dev/null 2>&1) &
+(apt update -y >/dev/null 2>&1) &
 spinner
-[[ $? -ne 0 ]] && error_exit "Fallo al actualizar repositorios"
+progress
 success "Repositorios actualizados"
 
 divider
-info "Instalando dependencias del sistema..."
-(sudo apt install python3 python3-pip git curl -y > /dev/null 2>&1) &
+
+info "Instalando dependencias..."
+(apt install python3 python3-pip git curl -y >/dev/null 2>&1) &
 spinner
-[[ $? -ne 0 ]] && error_exit "No se pudieron instalar dependencias"
+progress
 success "Dependencias instaladas"
 
 divider
-info "Verificando instalación de Python..."
+
+info "Verificando Python..."
 check_python
 success "Python instalado correctamente"
 
-divider
 info "Verificando pip..."
 check_pip
 success "pip funcionando correctamente"
@@ -142,73 +127,87 @@ success "pip funcionando correctamente"
 divider
 
 if [ -d "$FOLDER" ]; then
-info "Repositorio ya existe en el sistema"
+info "Repositorio ya existe"
 else
-info "Clonando repositorio desde GitHub..."
-(git clone $REPO > /dev/null 2>&1) &
+info "Clonando repositorio..."
+(git clone $REPO >/dev/null 2>&1) &
 spinner
-[[ $? -ne 0 ]] && error_exit "No se pudo clonar el repositorio"
-success "Repositorio clonado correctamente"
+progress
+success "Repositorio clonado"
 fi
 
-divider
-
-cd $FOLDER || error_exit "No se pudo acceder a la carpeta del bot"
+cd $FOLDER || error_exit "No se pudo acceder al directorio"
 
 success "Ubicación actual: $(pwd)"
 
 divider
 
 echo -e "${YELLOW}🔑 Ingresa el TOKEN de tu bot de Telegram${RESET}"
-echo -e "${CYAN}(Puedes obtenerlo desde @BotFather)${RESET}"
+echo -e "${CYAN}(puedes obtenerlo desde @BotFather en Telegram)${RESET}"
 
 read -p "TOKEN: " TELEGRAM_TOKEN
 
 validate_token
-
 export TELEGRAM_TOKEN="$TELEGRAM_TOKEN"
-
 save_token
 
-success "TOKEN configurado y guardado correctamente"
+success "TOKEN guardado correctamente"
 
 divider
 
 info "Actualizando pip..."
-(pip3 install --upgrade pip > /dev/null 2>&1) &
+(pip3 install --upgrade pip --root-user-action=ignore >/dev/null 2>&1) &
 spinner
-[[ $? -ne 0 ]] && error_exit "No se pudo actualizar pip"
+progress
 success "pip actualizado"
 
 divider
 
-info "Instalando dependencias del bot..."
-(pip3 install -r requirements.txt > /dev/null 2>&1) &
+info "Instalando dependencias Python..."
+(pip3 install -r requirements.txt --root-user-action=ignore >/dev/null 2>&1) &
 spinner
-[[ $? -ne 0 ]] && error_exit "Error instalando dependencias Python"
+progress
 success "Dependencias instaladas"
 
 divider
 
 if [ ! -f "bot.py" ]; then
-error_exit "No se encontró bot.py en la carpeta"
+error_exit "No se encontró bot.py"
 fi
 
-success "Archivo bot.py encontrado"
+success "Archivo bot.py detectado"
+
+divider
+
+info "Iniciando bot en segundo plano..."
+
+nohup python3 bot.py > bot.log 2>&1 &
+
+sleep 2
+
+PID=$(pgrep -f bot.py)
+
+if [ -n "$PID" ]; then
+success "Bot iniciado correctamente (PID $PID)"
+else
+error_exit "El bot no se pudo iniciar"
+fi
 
 divider
 
 echo -e "${GREEN}"
-echo "╔════════════════════════════════════════════════════════╗"
-echo "║                     INSTALACIÓN COMPLETADA                       ║"
-echo "║              El bot se iniciará automáticamente                  ║"
-echo "╚════════════════════════════════════════════════════════╝"
+echo "╔════════════════════════════════════════════╗"
+echo "║         INSTALACIÓN COMPLETADA             ║"
+echo "║   El bot se iniciará automáticamente       ║"
+echo "╚════════════════════════════════════════════╝"
 echo -e "${RESET}"
 
-sleep 2
-
-divider
-info "Iniciando bot..."
 divider
 
-python3 bot.py
+echo -e "${CYAN}Comandos útiles:${RESET}"
+
+echo -e "${WHITE}Ver logs:${RESET} tail -f bot.log"
+echo -e "${WHITE}Ver proceso:${RESET} ps aux | grep bot.py"
+echo -e "${WHITE}Detener bot:${RESET} kill $PID"
+
+divider
