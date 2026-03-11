@@ -115,7 +115,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         desc = session["crear_desc"]
 
         # Ejecutar script bash con parámetros
-        cmd = f"./scripts/crear_cloudfront.sh {origin} {cname} '{desc}'"
+        cmd = f"./scripts/crear_distribucion.sh {origin} {cname} '{desc}'"
         result = subprocess.getoutput(cmd)
         await update.message.reply_text(f"📡 Resultado:\n{result}")
 
