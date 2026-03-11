@@ -18,28 +18,6 @@ RESET='\e[0m'
 REPO="https://github.com/ChristopherAGT/cdn-aws-bot.git"
 FOLDER="cdn-aws-bot"
 
-spinner() {
-    local pid=$!
-    local spin='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
-    local i=0
-    while kill -0 $pid 2>/dev/null; do
-        i=$(( (i+1) %10 ))
-        printf "\r${CYAN}[%c]${RESET} " "${spin:$i:1}"
-        sleep .15
-    done
-    printf "\r"
-}
-
-progress(){
-echo -ne "${GREEN}[#####               ] 25%\r"
-sleep 0.2
-echo -ne "${GREEN}[##########          ] 50%\r"
-sleep 0.2
-echo -ne "${GREEN}[###############     ] 75%\r"
-sleep 0.2
-echo -ne "${GREEN}[####################] 100%${RESET}\n"
-}
-
 divider() {
 echo -e "${BLUE}════════════════════════════════════════════════════════════${RESET}"
 }
@@ -80,9 +58,11 @@ curl -s https://github.com >/dev/null || error_exit "GitHub no responde. Verifiq
 }
 
 validate_token() {
+
 if [[ ! "$TELEGRAM_TOKEN" =~ ^[0-9]+:[A-Za-z0-9_-]+$ ]]; then
 error_exit "TOKEN inválido. Formato incorrecto."
 fi
+
 }
 
 verify_token_api(){
@@ -98,7 +78,9 @@ fi
 }
 
 save_token() {
-echo "export TELEGRAM_TOKEN=\"$TELEGRAM_TOKEN\"" >> ~/.bashrc
+
+grep -q TELEGRAM_TOKEN ~/.bashrc || echo "export TELEGRAM_TOKEN=\"$TELEGRAM_TOKEN\"" >> ~/.bashrc
+
 }
 
 divider
@@ -113,8 +95,7 @@ fi
 
 divider
 info "Verificando conexión con GitHub..."
-(check_github) &
-spinner
+check_github
 success "GitHub accesible"
 
 divider
@@ -123,16 +104,12 @@ wait_for_apt
 
 divider
 info "Actualizando repositorios..."
-(apt update -y > /dev/null 2>&1) &
-spinner
-progress
+apt update -y || error_exit "No se pudo actualizar apt"
 success "Repositorios actualizados"
 
 divider
 info "Instalando dependencias del sistema..."
-(apt install python3 python3-pip git curl -y > /dev/null 2>&1) &
-spinner
-progress
+apt install python3 python3-pip git curl -y || error_exit "No se pudieron instalar dependencias"
 success "Dependencias instaladas"
 
 divider
@@ -151,9 +128,7 @@ if [ -d "$FOLDER" ]; then
 info "Repositorio ya existe en el sistema"
 else
 info "Clonando repositorio desde GitHub..."
-(git clone $REPO > /dev/null 2>&1) &
-spinner
-progress
+git clone $REPO || error_exit "No se pudo clonar el repositorio"
 success "Repositorio clonado correctamente"
 fi
 
@@ -175,23 +150,26 @@ verify_token_api
 
 export TELEGRAM_TOKEN="$TELEGRAM_TOKEN"
 save_token
+source ~/.bashrc
 
 success "TOKEN verificado y guardado correctamente"
 
 divider
 
 info "Actualizando pip..."
-(pip3 install --upgrade pip --root-user-action=ignore > /dev/null 2>&1) &
-spinner
-progress
+pip3 install --upgrade pip --root-user-action=ignore || error_exit "No se pudo actualizar pip"
 success "pip actualizado"
 
 divider
 
-info "Instalando dependencias del bot..."
-(pip3 install -r requirements.txt --root-user-action=ignore > /dev/null 2>&1) &
-spinner
-progress
+info "Instalando dependencias Python..."
+pip3 install -r requirements.txt --root-user-action=ignore
+pip3 install python-telegram-bot boto3 requests --root-user-action=ignore
+
+if [ $? -ne 0 ]; then
+error_exit "Error instalando dependencias Python"
+fi
+
 success "Dependencias instaladas"
 
 divider
@@ -212,7 +190,9 @@ else
 
 info "Iniciando bot en segundo plano..."
 
-nohup python3 bot.py > bot.log 2>&1 &
+touch bot.log
+
+nohup python3 bot.py >> bot.log 2>&1 &
 
 sleep 5
 
