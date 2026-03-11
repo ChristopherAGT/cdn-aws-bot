@@ -4,13 +4,13 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, fil
 import boto3
 import subprocess
 
-# Diccionario para guardar credenciales temporalmente
+# -------------------- Diccionario de sesiones --------------------
 user_sessions = {}
 
 # -------------------- Comandos básicos --------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "📡 Bienvenido usuario, este Bot de CloudFront\n"
+        "📡 Bienvenido al Bot de CloudFront\n"
         "Para empezar, ingresa tus credenciales de AWS con /aws\n"
         "Comandos disponibles:\n"
         "/listar - listar distribuciones\n"
@@ -26,33 +26,10 @@ async def aws(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_sessions[user_id] = {"state": "asking_access_key"}
     await update.message.reply_text("Ingresa tu AWS Access Key ID:")
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
-    text = update.message.text.strip()
-
-    if user_id not in user_sessions:
-        await update.message.reply_text("Por favor inicia con /aws primero")
-        return
-
-    session = user_sessions[user_id]
-
-    if session.get("state") == "asking_access_key":
-        session["aws_key"] = text
-        session["state"] = "asking_secret_key"
-        await update.message.reply_text("Ahora ingresa tu AWS Secret Access Key:")
-    elif session.get("state") == "asking_secret_key":
-        session["aws_secret"] = text
-        session["state"] = "asking_region"
-        await update.message.reply_text("Finalmente, ingresa la región de AWS (ej. us-east-1):")
-    elif session.get("state") == "asking_region":
-        session["region"] = text
-        session["state"] = "ready"
-        await update.message.reply_text("✅ ¡Credenciales guardadas temporalmente! Ahora puedes usar los comandos del bot.")
-
-# -------------------- Función para crear sesión boto3 por usuario --------------------
+# -------------------- Función para crear sesión boto3 --------------------
 def get_aws_session(user_id):
     session = user_sessions.get(user_id)
-    if not session or session.get("state") != "ready":
+    if not session or session.get("state") not in ["ready", "crear_origin", "crear_cname", "crear_desc"]:
         return None
     return boto3.Session(
         aws_access_key_id=session["aws_key"],
@@ -73,13 +50,9 @@ async def listar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"Distribuciones: {ids if ids else 'No hay distribuciones'}")
 
 async def uso(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Aquí puedes llamar a tu script ver_uso.sh
+    # Llamada a tu script ver_uso.sh
     result = subprocess.getoutput("./scripts/ver_uso.sh")
     await update.message.reply_text(f"Uso de transferencia:\n{result}")
-
-async def crear(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    result = subprocess.getoutput("./scripts/crear_cloudfront.sh")
-    await update.message.reply_text(result)
 
 async def eliminar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = subprocess.getoutput("./scripts/eliminar_distribucion.sh")
@@ -88,6 +61,68 @@ async def eliminar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def estado(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = subprocess.getoutput("uptime")
     await update.message.reply_text(f"Estado VPS:\n{result}")
+
+# -------------------- Crear distribución interactiva --------------------
+async def crear(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    aws_session = get_aws_session(user_id)
+    if not aws_session:
+        await update.message.reply_text("Primero ingresa tus credenciales con /aws")
+        return
+    await update.message.reply_text("🌐 Ingresa el dominio de origen (ej: midominio.com):")
+    user_sessions[user_id]["state"] = "crear_origin"
+
+# -------------------- Manejo de mensajes --------------------
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    text = update.message.text.strip()
+
+    if user_id not in user_sessions:
+        await update.message.reply_text("Por favor inicia con /aws primero")
+        return
+
+    session = user_sessions[user_id]
+
+    # Configuración AWS
+    if session.get("state") == "asking_access_key":
+        session["aws_key"] = text
+        session["state"] = "asking_secret_key"
+        await update.message.reply_text("Ahora ingresa tu AWS Secret Access Key:")
+    elif session.get("state") == "asking_secret_key":
+        session["aws_secret"] = text
+        session["state"] = "asking_region"
+        await update.message.reply_text("Finalmente, ingresa la región de AWS (ej. us-east-1):")
+    elif session.get("state") == "asking_region":
+        session["region"] = text
+        session["state"] = "ready"
+        await update.message.reply_text("✅ ¡Credenciales guardadas temporalmente! Ahora puedes usar los comandos del bot.")
+
+    # Flujo para crear CloudFront
+    elif session.get("state") == "crear_origin":
+        session["crear_origin"] = text
+        session["state"] = "crear_cname"
+        await update.message.reply_text("🔗 Ingresa el CNAME (ej: cdn.midominio.com) o deja vacío si no deseas:")
+    elif session.get("state") == "crear_cname":
+        session["crear_cname"] = text if text else ""
+        session["state"] = "crear_desc"
+        await update.message.reply_text("📝 Ingresa una descripción para la distribución (opcional):")
+    elif session.get("state") == "crear_desc":
+        session["crear_desc"] = text if text else "Cloudfront_Bot"
+        session["state"] = "ready"
+
+        origin = session["crear_origin"]
+        cname = session["crear_cname"]
+        desc = session["crear_desc"]
+
+        # Ejecutar script bash con parámetros
+        cmd = f"./scripts/crear_cloudfront.sh {origin} {cname} '{desc}'"
+        result = subprocess.getoutput(cmd)
+        await update.message.reply_text(f"📡 Resultado:\n{result}")
+
+        # Limpiar flujo
+        session.pop("crear_origin", None)
+        session.pop("crear_cname", None)
+        session.pop("crear_desc", None)
 
 # -------------------- Inicializar bot --------------------
 app = ApplicationBuilder().token(os.getenv("TELEGRAM_TOKEN")).build()
