@@ -10,7 +10,7 @@ user_sessions = {}
 # -------------------- Comandos básicos --------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "📡 Bienvenido al Bot de CloudFront\n"
+        "📡 Bienvenido usuario, este Bot de CloudFront\n"
         "Para empezar, ingresa tus credenciales de AWS con /aws\n"
         "Comandos disponibles:\n"
         "/listar - listar distribuciones\n"
